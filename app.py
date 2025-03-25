@@ -3,12 +3,12 @@ from flask_bcrypt import Bcrypt
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
+import os
 
 app = Flask(__name__)
-app.secret_key = 'una_chiave_segreta_molto_sicura'  # Cambia con una chiave unica e segreta
+app.secret_key = 'una_chiave_segreta_molto_sicura'
 bcrypt = Bcrypt(app)
 
-# Configurazione del database
 DB_NAME = "shopping_list.db"
 
 def init_db():
@@ -54,7 +54,19 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS expense_types (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     description TEXT NOT NULL UNIQUE)''')
-    # Popola la tabella expense_types con alcune tipologie di default
+    c.execute('''CREATE TABLE IF NOT EXISTS bike_maintenance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    maintenance_date TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS useful_numbers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    description TEXT NOT NULL,
+                    phone_number TEXT NOT NULL,
+                    notes TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id))''')
     default_expense_types = [("Cibo",), ("Trasporti",), ("Bollette",), ("Svago",), ("Altro",)]
     c.executemany("INSERT OR IGNORE INTO expense_types (description) VALUES (?)", default_expense_types)
     conn.commit()
@@ -94,6 +106,12 @@ template = '''
         .menu-btn-3:hover { background: #e68a00; }
         .menu-btn-4 { background: #6f42c1; }
         .menu-btn-4:hover { background: #5e35b1; }
+        .menu-btn-5 { background: #17a2b8; }
+        .menu-btn-5:hover { background: #138496; }
+        .menu-btn-6 { background: #dc3545; }
+        .menu-btn-6:hover { background: #c82333; }
+        .menu-btn-7 { background: #ffc107; }
+        .menu-btn-7:hover { background: #e0a800; }
         .remove-btn { background: #dc3545; width: auto; padding: 8px 16px; }
         .remove-btn:hover { background: #c82333; }
         .link-btn { background: #007bff; width: auto; padding: 10px 20px; }
@@ -101,11 +119,13 @@ template = '''
         .back-btn { background: #6c757d; margin-top: 20px; }
         .back-btn:hover { background: #5a6268; }
         .settings-btn, .calendar-btn { background: none; border: none; font-size: 24px; cursor: pointer; margin-right: 10px; }
-        .item, .expense-item, .activity-item { 
+        .item, .expense-item, .activity-item, .maintenance-item, .number-item { 
             background: white; padding: 15px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
             display: flex; justify-content: space-between; align-items: center; }
-        .item span, .expense-item span, .activity-item span { flex-grow: 1; }
-        .quantity { margin-left: 10px; color: #555; }
+        .item-content { display: flex; justify-content: space-between; width: 100%; }
+        .item-description { flex-grow: 1; }
+        .item-quantity { margin-left: 10px; color: #555; }
+        .expense-item span, .activity-item span, .maintenance-item span, .number-item span { flex-grow: 1; }
         .color-box { display: inline-block; width: 20px; height: 20px; margin-left: 10px; vertical-align: middle; }
         .empty { color: #777; font-style: italic; text-align: center; }
         .error { color: #dc3545; margin-top: 10px; text-align: center; }
@@ -280,6 +300,9 @@ template = '''
                 <button class="menu-btn-2" onclick="showSection('expense-report')">Rendicontazione Spese</button>
                 <button class="menu-btn-3" onclick="showSection('task-planner')">Programmazione Attività</button>
                 <button class="menu-btn-4" onclick="showSection('bike-maintenance')">Manutenzione Bicicletta</button>
+                <button class="menu-btn-5" onclick="showSection('useful-numbers')">Numeri Utili</button>
+                <button class="menu-btn-6" onclick="showSection('oscar-schedule')">Turnazione Oscar</button>
+                <button class="menu-btn-7" onclick="showSection('notes')">Note</button>
             </div>
             
             <div id="settings" class="content">
@@ -368,7 +391,10 @@ template = '''
                 {% if items %}
                     {% for item in items %}
                         <div class="item">
-                            <span>{{ item[1] }} <span class="quantity">({{ item[2] }})</span></span>
+                            <div class="item-content">
+                                <span class="item-description">{{ item[1] }}</span>
+                                <span class="item-quantity">({{ item[2] }})</span>
+                            </div>
                             <a href="{{ url_for('remove_item', item_id=item[0]) }}"><button class="remove-btn">Rimuovi</button></a>
                         </div>
                     {% endfor %}
@@ -530,6 +556,66 @@ template = '''
             
             <div id="bike-maintenance" class="content">
                 <h2>Manutenzione Bicicletta</h2>
+                <div class="form-container">
+                    <form method="POST" action="/add_maintenance">
+                        <input type="date" name="maintenance_date" required>
+                        <select name="description" required>
+                            {% for maintenance_type in maintenance_types %}
+                                <option value="{{ maintenance_type[1] }}">{{ maintenance_type[1] }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" style="background: #6f42c1;">Aggiungi Manutenzione</button>
+                    </form>
+                </div>
+                {% if maintenances %}
+                    {% for maintenance in maintenances %}
+                        <div class="maintenance-item">
+                            <span>{{ maintenance[2] }} - {{ maintenance[3] }}</span>
+                            <a href="{{ url_for('remove_maintenance', maintenance_id=maintenance[0]) }}"><button class="remove-btn">Rimuovi</button></a>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="empty">Nessuna manutenzione registrata.</p>
+                {% endif %}
+                <button class="back-btn" onclick="showMenu()">Torna al Menu</button>
+            </div>
+            
+            <div id="useful-numbers" class="content">
+                <h2>Numeri Utili</h2>
+                <div class="form-container">
+                    <form method="POST" action="/add_number">
+                        <input type="text" name="description" placeholder="Descrizione" required>
+                        <input type="text" name="phone_number" placeholder="Numero di telefono" required>
+                        <input type="text" name="notes" placeholder="Note">
+                        <button type="submit" style="background: #17a2b8;">Aggiungi Numero</button>
+                    </form>
+                </div>
+                {% if numbers %}
+                    <table>
+                        <tr><th>Descrizione</th><th>Numero</th><th>Note</th><th>Azione</th></tr>
+                        {% for number in numbers %}
+                            <tr>
+                                <td>{{ number[2] }}</td>
+                                <td>{{ number[3] }}</td>
+                                <td>{{ number[4] or '' }}</td>
+                                <td><a href="{{ url_for('remove_number', number_id=number[0]) }}"><button class="remove-btn">Rimuovi</button></a></td>
+                            </tr>
+                        {% endfor %}
+                    </table>
+                {% else %}
+                    <p class="empty">Nessun numero utile registrato.</p>
+                {% endif %}
+                <button class="back-btn" onclick="showMenu()">Torna al Menu</button>
+            </div>
+            
+            <div id="oscar-schedule" class="content">
+                <h2>Turnazione Oscar</h2>
+                <p>Funzionalità in sviluppo...</p>
+                <button class="back-btn" onclick="showMenu()">Torna al Menu</button>
+            </div>
+            
+            <div id="notes" class="content">
+                <h2>Note</h2>
                 <p>Funzionalità in sviluppo...</p>
                 <button class="back-btn" onclick="showMenu()">Torna al Menu</button>
             </div>
@@ -550,11 +636,11 @@ def home():
     today = datetime.now().strftime('%Y-%m-%d')
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("SELECT id, item, quantity FROM shopping_list WHERE user_id = ?", (user_id,))
+        c.execute("SELECT id, item, quantity FROM shopping_list")
         items = c.fetchall()
-        c.execute("SELECT id, user_id, date, description, amount, spender FROM expenses WHERE user_id = ?", (user_id,))
+        c.execute("SELECT id, user_id, date, description, amount, spender FROM expenses")
         expenses = c.fetchall()
-        c.execute("SELECT id, user_id, activity_date, activity_time, description, location, activity_type FROM activities WHERE user_id = ?", (user_id,))
+        c.execute("SELECT id, user_id, activity_date, activity_time, description, location, activity_type FROM activities")
         activities = c.fetchall()
         c.execute("SELECT id, description, color FROM activity_types")
         activity_types = c.fetchall()
@@ -562,6 +648,10 @@ def home():
         maintenance_types = c.fetchall()
         c.execute("SELECT id, description FROM expense_types")
         expense_types = c.fetchall()
+        c.execute("SELECT id, user_id, maintenance_date, description FROM bike_maintenance")
+        maintenances = c.fetchall()
+        c.execute("SELECT id, user_id, description, phone_number, notes FROM useful_numbers ORDER BY description ASC")
+        numbers = c.fetchall()
 
     monthly_totals = defaultdict(float)
     yearly_by_description = defaultdict(float)
@@ -579,7 +669,8 @@ def home():
     return render_template_string(template, items=items, expenses=expenses, activities=activities,
                                  activity_types=activity_types, maintenance_types=maintenance_types,
                                  expense_types=expense_types, monthly_totals=dict(monthly_totals),
-                                 yearly_by_description=dict(yearly_by_description), today=today)
+                                 yearly_by_description=dict(yearly_by_description), today=today,
+                                 maintenances=maintenances, numbers=numbers)
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -636,7 +727,7 @@ def add_item():
     user_id = session.get('user_id')
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("SELECT item FROM shopping_list WHERE user_id = ? AND item = ?", (user_id, item))
+        c.execute("SELECT item FROM shopping_list WHERE item = ?", (item,))
         if not c.fetchone():
             c.execute("INSERT INTO shopping_list (user_id, item, quantity) VALUES (?, ?, ?)", (user_id, item, quantity))
             conn.commit()
@@ -646,10 +737,9 @@ def add_item():
 def remove_item(item_id):
     if not session.get('logged_in'):
         return redirect(url_for('home'))
-    user_id = session.get('user_id')
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("DELETE FROM shopping_list WHERE id = ? AND user_id = ?", (item_id, user_id))
+        c.execute("DELETE FROM shopping_list WHERE id = ?", (item_id,))
         conn.commit()
     return redirect(url_for('home'))
 
@@ -673,10 +763,9 @@ def add_expense():
 def remove_expense(expense_id):
     if not session.get('logged_in'):
         return redirect(url_for('home'))
-    user_id = session.get('user_id')
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
+        c.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
         conn.commit()
     return redirect(url_for('home'))
 
@@ -701,10 +790,9 @@ def add_activity():
 def remove_activity(activity_id):
     if not session.get('logged_in'):
         return redirect(url_for('home'))
-    user_id = session.get('user_id')
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("DELETE FROM activities WHERE id = ? AND user_id = ?", (activity_id, user_id))
+        c.execute("DELETE FROM activities WHERE id = ?", (activity_id,))
         conn.commit()
     return redirect(url_for('home'))
 
@@ -781,5 +869,55 @@ def remove_expense_type(type_id):
         conn.commit()
     return redirect(url_for('home'))
 
+@app.route('/add_maintenance', methods=['POST'])
+def add_maintenance():
+    if not session.get('logged_in'):
+        return redirect(url_for('home'))
+    maintenance_date = request.form['maintenance_date']
+    description = request.form['description']
+    user_id = session.get('user_id')
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("INSERT INTO bike_maintenance (user_id, maintenance_date, description) VALUES (?, ?, ?)",
+                 (user_id, maintenance_date, description))
+        conn.commit()
+    return redirect(url_for('home'))
+
+@app.route('/remove_maintenance/<int:maintenance_id>')
+def remove_maintenance(maintenance_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('home'))
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM bike_maintenance WHERE id = ?", (maintenance_id,))
+        conn.commit()
+    return redirect(url_for('home'))
+
+@app.route('/add_number', methods=['POST'])
+def add_number():
+    if not session.get('logged_in'):
+        return redirect(url_for('home'))
+    description = request.form['description'].strip()
+    phone_number = request.form['phone_number'].strip()
+    notes = request.form['notes'].strip() or None
+    user_id = session.get('user_id')
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("INSERT INTO useful_numbers (user_id, description, phone_number, notes) VALUES (?, ?, ?, ?)",
+                 (user_id, description, phone_number, notes))
+        conn.commit()
+    return redirect(url_for('home'))
+
+@app.route('/remove_number/<int:number_id>')
+def remove_number(number_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('home'))
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM useful_numbers WHERE id = ?", (number_id,))
+        conn.commit()
+    return redirect(url_for('home'))
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
