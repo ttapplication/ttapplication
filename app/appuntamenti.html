@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appuntamenti</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 600px; margin: 0 auto; }
+        form { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        input[type="text"], input[type="datetime-local"] { flex: 1; padding: 10px; font-size: 16px; border: 1px solid #ddd; border-radius: 5px; }
+        input[type="submit"] { padding: 10px 20px; font-size: 16px; border: none; border-radius: 5px; background: #28a745; color: white; cursor: pointer; }
+        .delete-btn { background: #dc3545; }
+        ul { list-style: none; padding: 0; }
+        li { background: white; padding: 15px; margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+        a { display: block; text-align: center; margin-top: 20px; color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Appuntamenti</h1>
+        <form method="POST">
+            <input type="text" name="descrizione" placeholder="Descrizione" required>
+            <input type="datetime-local" name="data" required>
+            <input type="submit" name="aggiungi" value="Aggiungi">
+        </form>
+        <ul>
+        {% for app in appuntamenti %}
+            <li>{{ app[1] }} - {{ app[2] }}
+                <form method="POST">
+                    <input type="hidden" name="app_id" value="{{ app[0] }}">
+                    <input type="submit" name="cancella" value="X" class="delete-btn">
+                </form>
+            </li>
+        {% endfor %}
+        </ul>
+        <a href="{{ url_for('home') }}">Torna alla Home</a>
+    </div>
+</body>
+</html>
