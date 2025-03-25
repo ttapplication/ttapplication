@@ -74,6 +74,21 @@ def init_db():
     conn.commit()
     conn.close()
 
+def migrate_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Controlla se la colonna 'notes' esiste nella tabella shopping_list
+    c.execute("PRAGMA table_info(shopping_list)")
+    columns = [col[1] for col in c.fetchall()]
+    if 'notes' not in columns:
+        print("Aggiungo la colonna 'notes' alla tabella shopping_list...")
+        c.execute("ALTER TABLE shopping_list ADD COLUMN notes TEXT")
+        conn.commit()
+        print("Colonna 'notes' aggiunta con successo.")
+    else:
+        print("La colonna 'notes' esiste già nella tabella shopping_list.")
+    conn.close()
+
 # Template HTML con CSS e JavaScript
 template = '''
 <!DOCTYPE html>
@@ -638,6 +653,7 @@ template = '''
 
 # Inizializza o aggiorna il database all'avvio
 init_db()
+migrate_db()  # Esegui la migrazione per aggiungere la colonna 'notes'
 
 @app.route('/')
 def home():
