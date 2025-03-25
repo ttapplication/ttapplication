@@ -9,6 +9,7 @@ app = Flask(__name__)
 app.secret_key = 'una_chiave_segreta_molto_sicura'
 bcrypt = Bcrypt(app)
 
+# Configurazione del database
 DB_NAME = "shopping_list.db"
 
 def init_db():
@@ -26,6 +27,7 @@ def init_db():
                     user_id INTEGER,
                     item TEXT NOT NULL,
                     quantity INTEGER DEFAULT 1,
+                    notes TEXT,
                     FOREIGN KEY (user_id) REFERENCES users(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS expenses (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,9 +124,10 @@ template = '''
         .item, .expense-item, .activity-item, .maintenance-item, .number-item { 
             background: white; padding: 15px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
             display: flex; justify-content: space-between; align-items: center; }
-        .item-content { display: flex; justify-content: space-between; width: 100%; }
+        .item-content { display: flex; justify-content: space-between; width: 100%; flex-wrap: wrap; }
         .item-description { flex-grow: 1; }
         .item-quantity { margin-left: 10px; color: #555; }
+        .item-notes { margin-left: 10px; color: #777; font-style: italic; }
         .expense-item span, .activity-item span, .maintenance-item span, .number-item span { flex-grow: 1; }
         .color-box { display: inline-block; width: 20px; height: 20px; margin-left: 10px; vertical-align: middle; }
         .empty { color: #777; font-style: italic; text-align: center; }
@@ -146,6 +149,7 @@ template = '''
         .calendar-day { background: white; padding: 10px; border-radius: 8px; text-align: center; cursor: pointer; }
         .calendar-day:hover { background: #e9ecef; }
         .activity-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin: 2px; }
+        .logo { display: block; margin: 20px auto; max-width: 200px; }
         @media (min-width: 768px) {
             .container { max-width: 600px; margin: 0 auto; }
             .menu { max-width: 300px; }
@@ -271,6 +275,7 @@ template = '''
                         <p class="error">{{ error }}</p>
                     {% endif %}
                     <a href="{{ url_for('home') }}"><button type="button" class="link-btn">Torna al Login</button></a>
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Tati Adventure Logo" class="logo">
                 </form>
             {% else %}
                 <h1>Login</h1>
@@ -284,6 +289,7 @@ template = '''
                         <p class="error">{{ error }}</p>
                     {% endif %}
                     <a href="{{ url_for('register') }}"><button type="button" class="link-btn">Iscriviti</button></a>
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Tati Adventure Logo" class="logo">
                 </form>
             {% endif %}
         {% else %}
@@ -303,6 +309,7 @@ template = '''
                 <button class="menu-btn-5" onclick="showSection('useful-numbers')">Numeri Utili</button>
                 <button class="menu-btn-6" onclick="showSection('oscar-schedule')">Turnazione Oscar</button>
                 <button class="menu-btn-7" onclick="showSection('notes')">Note</button>
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Tati Adventure Logo" class="logo">
             </div>
             
             <div id="settings" class="content">
@@ -385,6 +392,7 @@ template = '''
                     <form method="POST" action="/add">
                         <input type="text" name="item" placeholder="Aggiungi un articolo" required>
                         <input type="number" name="quantity" value="1" min="1" placeholder="Quantità">
+                        <input type="text" name="notes" placeholder="Note (opzionale)">
                         <button type="submit" style="background: #28a745;">Aggiungi</button>
                     </form>
                 </div>
@@ -394,6 +402,9 @@ template = '''
                             <div class="item-content">
                                 <span class="item-description">{{ item[1] }}</span>
                                 <span class="item-quantity">({{ item[2] }})</span>
+                                {% if item[3] %}
+                                    <span class="item-notes">{{ item[3] }}</span>
+                                {% endif %}
                             </div>
                             <a href="{{ url_for('remove_item', item_id=item[0]) }}"><button class="remove-btn">Rimuovi</button></a>
                         </div>
@@ -636,7 +647,7 @@ def home():
     today = datetime.now().strftime('%Y-%m-%d')
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("SELECT id, item, quantity FROM shopping_list")
+        c.execute("SELECT id, item, quantity, notes FROM shopping_list")
         items = c.fetchall()
         c.execute("SELECT id, user_id, date, description, amount, spender FROM expenses")
         expenses = c.fetchall()
@@ -644,7 +655,7 @@ def home():
         activities = c.fetchall()
         c.execute("SELECT id, description, color FROM activity_types")
         activity_types = c.fetchall()
-        c.execute("SELECT id, description FROM maintenance_types")
+        c.execute("SELECT id, description FROM maintenance_types ORDER BY description ASC")
         maintenance_types = c.fetchall()
         c.execute("SELECT id, description FROM expense_types")
         expense_types = c.fetchall()
@@ -724,12 +735,13 @@ def add_item():
         return redirect(url_for('home'))
     item = request.form['item'].strip()
     quantity = int(request.form.get('quantity', 1))
+    notes = request.form.get('notes', '').strip() or None
     user_id = session.get('user_id')
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
         c.execute("SELECT item FROM shopping_list WHERE item = ?", (item,))
         if not c.fetchone():
-            c.execute("INSERT INTO shopping_list (user_id, item, quantity) VALUES (?, ?, ?)", (user_id, item, quantity))
+            c.execute("INSERT INTO shopping_list (user_id, item, quantity, notes) VALUES (?, ?, ?, ?)", (user_id, item, quantity, notes))
             conn.commit()
     return redirect(url_for('home'))
 
